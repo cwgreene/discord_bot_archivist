@@ -54,13 +54,16 @@ async def save_channel(channel):
     return result
 
 class Archivist(discord.Client):
+    def __init__(self, category):
+        discord.Client.__init__(self)
+        self.archive_category = category
     async def on_ready(self):
         try:
             result = {}
             for guild in self.guilds:
                 for category in guild.categories:
-                    if category.name.lower() == options.category:
-                        result = {"name": options.category}
+                    if category.name.lower() == self.archive_category:
+                        result = {"name": self.archive_category}
                         chans = []
                         for channel in category.text_channels:
                             messages = await save_channel(channel)
@@ -71,7 +74,7 @@ class Archivist(discord.Client):
             if options.delete:
                 for guild in self.guilds:
                     for category in guild.categories:
-                        if category.name.lower() == options.category:
+                        if category.name.lower() == self.archive_category:
                             print("Deleting:{}".format(category.name.lower()))
                             for channel in category.text_channels:
                                 print(" Deleting:{}".format(channel.name))
@@ -88,17 +91,18 @@ def main():
     global options,outputfile
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("category")
-    parser.add_argument("outputdir")
+    parser.add_argument("categories", nargs="+")
+    parser.add_argument("--outputdir")
     parser.add_argument("--delete", action="store_true")
     options = parser.parse_args()
-    filepath="{}/{}".format(options.outputdir, options.category)
-    if os.path.exists(filepath):
-        print("Refusing to overwrite file")
-        import sys
-        sys.exit(1)
-    outputfile = open(filepath, "w")
-    client = Archivist()
-    client.run(BOT_TOKEN)
+    for category in options.categories:
+        filepath="{}/{}".format(options.outputdir, category)
+        if os.path.exists(filepath):
+            print(f"Refusing to overwrite file {filepath}")
+            import sys
+            sys.exit(1)
+        outputfile = open(filepath, "w")
+        client = Archivist(category)
+        client.run(BOT_TOKEN)
 
 main()
