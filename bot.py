@@ -33,7 +33,7 @@ async def dictReaction(r):
     users = await r.users().flatten()
     users = [dictMember(user) for user in users]
     return {
-        "emoji": r.emoji,
+        "emoji": str(r.emoji),
         "count": r.count,
         "users": users,
         "is_custom": r.custom_emoji,
@@ -54,41 +54,47 @@ async def save_channel(channel):
     return result
 
 class Archivist(discord.Client):
-    def __init__(self, category):
+    def __init__(self, categories, outputdir, delete):
         discord.Client.__init__(self)
-        self.archive_category = category
-    async def on_ready(self):
-        try:
-            result = {}
+        self.categories = categories
+        self.outputdir = outputdir
+        self.delete = delete
+
+    async def archive_category(self, archive_category):
+        filepath="{}/{}".format(self.outputdir, archive_category)
+        outputfile = open(filepath, "w")
+        result = {}
+        for guild in self.guilds:
+            for category in guild.categories:
+                if category.name.lower() == archive_category:
+                    result = {"name": archive_category}
+                    chans = []
+                    for channel in category.text_channels:
+                        messages = await save_channel(channel)
+                        chans.append({"name": channel.name, "messages": messages})
+                    result["channels"] = chans
+                    break
+        outputfile.write(json.dumps(result))
+        if self.delete:
             for guild in self.guilds:
                 for category in guild.categories:
-                    if category.name.lower() == self.archive_category:
-                        result = {"name": self.archive_category}
-                        chans = []
+                    if category.name.lower() == archive_category:
+                        print("Deleting:{}".format(category.name.lower()))
                         for channel in category.text_channels:
-                            messages = await save_channel(channel)
-                            chans.append({"name": channel.name, "messages": messages})
-                        result["channels"] = chans
-                        break
-            outputfile.write(json.dumps(result))
-            if options.delete:
-                for guild in self.guilds:
-                    for category in guild.categories:
-                        if category.name.lower() == self.archive_category:
-                            print("Deleting:{}".format(category.name.lower()))
-                            for channel in category.text_channels:
-                                print(" Deleting:{}".format(channel.name))
-                                await channel.delete(reason="Deleted by archivist")
-                            await category.delete(reason="Deleted by archivist")
+                            print(" Deleting:{}".format(channel.name))
+                            await channel.delete(reason="Deleted by archivist")
+                        await category.delete(reason="Deleted by archivist")
+
+    async def on_ready(self):
+        try:
+            for category in self.categories:
+                await self.archive_category(category)
         except Exception as e:
             traceback.print_exc()
         finally:
             await self.close() # Code past this point never gets called.
 
-options = None
-outputfile = None
 def main():
-    global options,outputfile
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("categories", nargs="+")
@@ -101,8 +107,7 @@ def main():
             print(f"Refusing to overwrite file {filepath}")
             import sys
             sys.exit(1)
-        outputfile = open(filepath, "w")
-        client = Archivist(category)
-        client.run(BOT_TOKEN)
+    client = Archivist(options.categories, options.outputdir, options.delete)
+    client.run(BOT_TOKEN)
 
 main()
